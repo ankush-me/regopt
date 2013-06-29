@@ -1,4 +1,4 @@
 regopt
 ======
 
-SQP based registration
+Sequential quadratic program for registration.
