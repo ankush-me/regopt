@@ -62,7 +62,8 @@ public:
 			K_nn.row(i) = (src_nd.rowwise() - src_nd.row(i)).rowwise().norm();
 
 		init_vars();
-
+		init_costs();
+		init_constraints();
 	}
 
 	~RegOptProb() {}
@@ -195,9 +196,62 @@ public:
 	/** Adds the following constraints:
 	 *  ===============================
 	 *    1. Doubly-stochastic constraint on M (allowing for outliers).
-	 *    2. (1 X).T * A = 0. */
+	 *    2. (1 X).T * A = 0.
+	 *  M_ij \in [0,1] : this is already set in variable construction. */
 	void init_constraints() {
+		doubly_stochastic_constraints();
+		vanishing_moment_constraints();
+	}
 
+	/** Double-stochasticity of correspondence matrix M. */
+	void doubly_stochastic_constraints() {
+		// doubly-stochastic M:
+		const unsigned int m = m_vars.rows();
+		const unsigned int n = m_vars.cols();
+
+		for (unsigned i=0; i < m-1; i+=1) {
+			AffExpr aff_cnt;
+			aff_cnt.vars     = m_vars.row(i);
+			aff_cnt.constant = -1.0;
+			aff_cnt.coeffs   = vector<double>(n, 1.0);
+			addLinearConstraint(aff_cnt, EQ);
+		}
+
+		for (unsigned i=0; i < n-1; i+=1) {
+			AffExpr aff_cnt;
+			aff_cnt.vars     = m_vars.col(i);
+			aff_cnt.constant = -1.0;
+			aff_cnt.coeffs   = vector<double>(m, 1.0);
+			addLinearConstraint(aff_cnt, EQ);
+		}
+	}
+
+	/** Constraints : (1 X).T * A = 0*/
+	void vanishing_moment_constraints() {
+
+		// 1.T*A = 0
+		for (unsigned i=0; i < a_vars.cols(); i+=1) {
+			AffExpr aff_cnt;
+			aff_cnt.vars     = a_vars.col(i);
+			aff_cnt.constant = 0.0;
+			aff_cnt.coeffs   = vector<double>(a_vars.rows(), 1.0);
+			addLinearConstraint(aff_cnt, EQ);
+		}
+
+		// X.T*A = 0;  src_nd == X
+		for(unsigned xi = 0; xi < src_nd.cols(); xi+=1) {
+			for(unsigned ai = 0; ai < a_vars.cols(); ai +=1) {
+				AffExpr aff_cnt;
+				aff_cnt.vars     = a_vars.col(ai);
+				aff_cnt.constant = 0.0;
+
+				vector<double> coeffs(src_nd.rows());
+				VectorXd::Map(&coeffs[0], coeffs.size()) = src_nd.col(xi);
+				aff_cnt.coeffs   = coeffs;
+
+				addLinearConstraint(aff_cnt, EQ);
+			}
+		}
 	}
 
 };
