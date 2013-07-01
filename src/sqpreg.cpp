@@ -1,16 +1,12 @@
-#include "problem_description.hpp"
+#include "sqpreg.hpp"
 #include "utils/eigen_utils.hpp"
-#include <sco/optimizers.hpp>
-#include <boost/shared_ptr.hpp>
-#include <vector>
 #include <algorithm>
-#include <utility>
+
 
 using namespace Eigen;
 using namespace std;
 using namespace sco;
 
-typedef boost::shared_ptr<BasicTrustRegionSQP> BasicTrustRegionSQPPtr;
 
 // put the values in the proper place in the big solution vector X.
 void set_vals(vector<double> &x, const MatrixXd & data, const VarArray &index_mat) {
@@ -24,7 +20,6 @@ void set_vals(vector<double> &x, const MatrixXd & data, const VarArray &index_ma
 	}
 }
 
-
 /** - Creates a registration problem.
  *    - adds it to the basic trust region solver
  *      - initializes the solution vector appropriately.
@@ -35,7 +30,8 @@ pair<BasicTrustRegionSQPPtr, RegOptProb::Ptr> setup_optimization(RegOptConfig::P
 	RegOptProb::Ptr prob(new RegOptProb(reg_config));
 	BasicTrustRegionSQPPtr solver(new BasicTrustRegionSQP(prob));
 	solver->trust_box_size_ = 100;
-
+	solver->max_iter_ = 20;
+	solver->min_trust_box_size_ = 1e-6;
 
 	/** Initialize the solution vector:
 	 *
@@ -74,40 +70,7 @@ pair<BasicTrustRegionSQPPtr, RegOptProb::Ptr> setup_optimization(RegOptConfig::P
 	return make_pair(solver, prob);
 }
 
+/** Define the boost python modules. **/
+BOOST_PYTHON_MODULE(sqpreg) {
 
-int main(int c, char**v) {
-
-	MatrixX3d src(4,3), target(10,3);
-	src << 1,0,1, -1,2,2, 0,0,0, 3,3,3;
-
-	RegOptConfig::Ptr config (new RegOptConfig);
-	config->src_pts     = src;
-	config->target_pts  = target;
-	config->rot_coeff   = Vector3d(1,1,1);
-	config->scale_coeff = 1;
-	config->bend_coeff  = 1;
-	config->correspondence_coeff = 1;
-	config->rotreg      = true;
-
-	pair<BasicTrustRegionSQPPtr, RegOptProb::Ptr> setup =  setup_optimization(config);
-	RegOptProb::Ptr prob = setup.second;
-
-	cout << "m_vars : "<<endl;
-	for (int i = 0; i < prob->m_vars.rows(); i+=1) {
-		for (int j=0; j < prob->m_vars.cols(); j+=1) {
-			cout << " " << prob->m_vars(i,j).var_rep->name;
-		}
-		cout <<endl;
-	}
-
-	cout << "a_vars : "<<endl;
-	for (int i = 0; i < prob->a_vars.rows(); i+=1) {
-		for (int j=0; j < prob->a_vars.cols(); j+=1) {
-			cout << " " << prob->a_vars(i,j).var_rep->name;
-		}
-		cout <<endl;
-	}
-
-
-	return 0;
 }

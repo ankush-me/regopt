@@ -4,6 +4,9 @@ include_directories(
 )
 
 add_subdirectory(utils)
+add_subdirectory(tests)
 
-add_executable(reg sqp_reg.cpp problem_description.cpp fastrapp.cpp)
-target_link_libraries(reg sco reg_utils)
+add_library(sqp_reg sqpreg.cpp problem_description.cpp fastrapp.cpp)
+
+# make the boost python module library
+boost_python_module(sqpreg sqpreg.cpp)
