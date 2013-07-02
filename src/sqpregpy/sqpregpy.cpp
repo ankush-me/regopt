@@ -51,26 +51,3 @@ BOOST_PYTHON_MODULE(sqpregpy) {
   py::def("fit_tps_sqp", &fit_tps_sqp, (py::arg("src"), py::arg("target"), py::arg("rot_coeff"),
 		  py::arg("scale_coeff"), py::arg("bend_coeff"), py::arg("correspondence_coeff"), py::arg("rotreg")));
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
