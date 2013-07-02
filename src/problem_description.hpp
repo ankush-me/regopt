@@ -7,12 +7,7 @@
 // John's sequential convex optimizer stuff
 #include <sco/modeling.hpp>
 #include <utils/basic_array.hpp>
-
-
-typedef Eigen::Matrix< double, Eigen::Dynamic, 3> MatrixX3d;
-typedef util::BasicArray<sco::Var> VarArray;
-
-
+#include <utils/opt_utils.hpp>
 
 /** Holds the input for a registration problem. **/
 struct RegOptConfig {

@@ -1,3 +1,4 @@
+#include "rotreg.hpp"
 #include <boost/foreach.hpp>
 #include <Eigen/Core>
 #include <Eigen/Dense>

@@ -11,8 +11,6 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(BUILD_SHARED_LIBS true)
 
-include(boost-python.cmake)
-
 # definitions
 add_definitions("-DPROJECT_DATA_DIR=${CMAKE_SOURCE_DIR}/data")
 

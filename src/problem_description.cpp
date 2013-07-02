@@ -5,7 +5,7 @@
 
 // John's sequential convex optimizer stuff
 #include <sco/modeling_utils.hpp>
-#include "fastrapp.hpp"
+#include "rotreg.hpp"
 
 using namespace Eigen;
 using namespace std;

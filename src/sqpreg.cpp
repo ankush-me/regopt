@@ -8,17 +8,6 @@ using namespace std;
 using namespace sco;
 
 
-// put the values in the proper place in the big solution vector X.
-void set_vals(vector<double> &x, const MatrixXd & data, const VarArray &index_mat) {
-	assert(("Indexing array and data array should have same shape. ",
-			data.cols()==index_mat.cols() && data.rows()==index_mat.rows()));
-
-	for(unsigned i =0; i < data.rows(); i +=1) {
-		for(unsigned j=0; j < data.cols(); j+=1) {
-			x[index_mat(i,j).var_rep->index] = data(i,j);
-		}
-	}
-}
 
 /** - Creates a registration problem.
  *    - adds it to the basic trust region solver
@@ -68,9 +57,4 @@ pair<BasicTrustRegionSQPPtr, RegOptProb::Ptr> setup_optimization(RegOptConfig::P
 
 	solver->initialize(x);
 	return make_pair(solver, prob);
-}
-
-/** Define the boost python modules. **/
-BOOST_PYTHON_MODULE(sqpreg) {
-
 }
