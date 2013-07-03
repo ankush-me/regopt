@@ -47,6 +47,7 @@ public:
 	unsigned int n_src, m_target;
 	bool rotreg;
 	Eigen::MatrixXd  K_nn;
+	unsigned call_count;
 
 	// hold the optimization variables for easy access
 	VarArray m_vars;
@@ -86,7 +87,7 @@ private:
 	double f_tps_cost(const Eigen::VectorXd& x);
 
 	/** Computes the polar-decomposition cost. Uses rapprentice's fastrapp. */
-	double f_rotreg_cost(const Eigen::MatrixXd &R);
+	double f_rotreg_cost(const Eigen::VectorXd& x);
 
 	/** Double-stochasticity of correspondence matrix M. */
 	void doubly_stochastic_constraints();

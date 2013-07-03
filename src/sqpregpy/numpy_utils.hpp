@@ -50,6 +50,16 @@ py::object toNdarray3(const T* data, size_t dim0, size_t dim1, size_t dim2) {
 	return out;
 }
 
+/** Converts a one-dimensional numpy vector to eigen VectorXd. */
+Eigen::VectorXd fromNumpyVector(py::object vec) {
+	assert(("Input numpy matrix is not one dimensional.", py::extract<int>(vec.attr("ndim"))==1));
+	vec = np_mod.attr("array")(vec, "float64");
+	int size = py::extract<int>(vec.attr("size"));
+
+	double* vec_data = getPointer<double>(vec);
+	return Eigen::Map<Eigen::VectorXd>(vec_data, size);
+}
+
 /** Converts a two-dimensional numpy matrix to eigen MatrixXd. */
 Eigen::MatrixXd fromNumpy(py::object mat) {
 	assert(("Input numpy matrix is not two dimensional.", py::extract<int>(mat.attr("ndim"))==2));

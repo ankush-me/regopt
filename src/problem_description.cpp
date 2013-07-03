@@ -57,6 +57,8 @@ RegOptProb::RegOptProb(const MatrixX3d &src_pts, const MatrixX3d &target_pts,
 
 /** Does self-initialization. */
 void RegOptProb::init() {
+
+	call_count = 0;
 	// compute the tps-kernel matrix
 	for (int i=0; i < n_src; i++)
 		K_nn.row(i) = (src_nd.rowwise() - src_nd.row(i)).rowwise().norm();
@@ -127,6 +129,11 @@ void  RegOptProb::init_costs() {
 	// add tps-cost
 	ScalarOfVectorPtr f_ptr = ScalarOfVector::construct(boost::bind( &RegOptProb::f_tps_cost, this, _1 ));
 	addCost(CostPtr(new CostFromFunc(f_ptr, getVars(), "f_tps_cost")));
+
+	if (rotreg) {
+		ScalarOfVectorPtr f_rotreg_ptr = ScalarOfVector::construct(boost::bind( &RegOptProb::f_rotreg_cost, this, _1 ));
+		addCost(CostPtr(new CostFromFunc(f_rotreg_ptr, b_vars.m_data, "f_rotreg_cost")));
+	}
 }
 
 /** Adds the following constraints:
@@ -139,21 +146,20 @@ void  RegOptProb::init_constraints() {
 	vanishing_moment_constraints();
 }
 
-
 /** Computes the tps-cost, given the current long solution vector x.
  *  Will use numerical differentiation for convex approximation.*/
 double  RegOptProb::f_tps_cost(const VectorXd& x) {
+	call_count += 1;
+
 	// retrieve current values in the correct matrix shapes.
 	MatrixXd M_mn = getMat(x, m_vars.block(0,0, n_src, m_target));
 	Vector3d c_3  = Vector3d(getMat(x, c_vars));
 	MatrixXd B_33 = getMat(x, b_vars);
 	MatrixXd A_n3 = getMat(x, a_vars);
 
-	double objective = 0.0;
-
 	// error term: sum_ij M_ij * || T_i - estimate_j ||^2
 	double err = 0.0;
-	MatrixXd est = (K_nn*A_n3 + src_nd*B_33).rowwise() + c_3;
+	MatrixXd est = (K_nn*A_n3 + src_nd*B_33).rowwise() + c_3.transpose();
 	for (unsigned i=0; i < target_md.rows(); i+=1) {
 		err += M_mn.row(i).dot((est.rowwise() - target_md.row(i)).rowwise().squaredNorm());
 	}
@@ -169,18 +175,15 @@ double  RegOptProb::f_tps_cost(const VectorXd& x) {
 	}
 	bending *= bend_coeff;
 
-	objective = err + M_sum - bending;
-
-	// add log-map cost
-	if (rotreg)
-		objective += f_rotreg_cost(B_33);
-
+	double objective = err - M_sum - bending;
 	return objective;
 }
 
+
 /** Computes the polar-decomposition cost. Uses rapprentice's fastrapp. */
-double  RegOptProb::f_rotreg_cost(const MatrixXd &R) {
-	return RotReg(R, rot_coeff, scale_coeff);
+double  RegOptProb::f_rotreg_cost(const VectorXd& x) {
+	Map<Matrix3d> B_33((double*)x.data(),3,3);
+	return RotReg(B_33, rot_coeff, scale_coeff);
 }
 
 /** Double-stochasticity of correspondence matrix M. */
