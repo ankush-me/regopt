@@ -5,6 +5,7 @@
 
 // John's sequential convex optimizer stuff
 #include <sco/modeling_utils.hpp>
+#include <sco/expr_ops.hpp>
 #include "rotreg.hpp"
 
 using namespace Eigen;
@@ -31,13 +32,13 @@ MatrixXd getMat(const vector<double>& x, const VarArray& vars) {
 
 
 RegOptProb::RegOptProb(RegOptConfig::Ptr config) :
-		src_nd(config->src_pts), target_md(config->target_pts),
-		rot_coeff(config->rot_coeff), scale_coeff(config->scale_coeff),
-		bend_coeff(config->bend_coeff),
-		correspondence_coeff(config->correspondence_coeff),
-		n_src(src_nd.rows()), m_target(target_md.rows()),
-		rotreg(config->rotreg),
-		K_nn(n_src, n_src) {
+										src_nd(config->src_pts), target_md(config->target_pts),
+										rot_coeff(config->rot_coeff), scale_coeff(config->scale_coeff),
+										bend_coeff(config->bend_coeff),
+										correspondence_coeff(config->correspondence_coeff),
+										n_src(src_nd.rows()), m_target(target_md.rows()),
+										rotreg(config->rotreg),
+										K_nn(n_src, n_src) {
 	init();
 }
 
@@ -130,6 +131,12 @@ void  RegOptProb::init_costs() {
 	ScalarOfVectorPtr f_ptr = ScalarOfVector::construct(boost::bind( &RegOptProb::f_tps_cost, this, _1 ));
 	addCost(CostPtr(new CostFromFunc(f_ptr, getVars(), "f_tps_cost")));
 
+	// add the bending cost:
+	addCost(CostPtr(new BendingCost(K_nn, bend_coeff, a_vars)));
+
+	// add the cost on correspondence matrix:
+	addCost(CostPtr(new CorrespondenceCost(correspondence_coeff, m_vars)));
+
 	if (rotreg) {
 		ScalarOfVectorPtr f_rotreg_ptr = ScalarOfVector::construct(boost::bind( &RegOptProb::f_rotreg_cost, this, _1 ));
 		addCost(CostPtr(new CostFromFunc(f_rotreg_ptr, b_vars.m_data, "f_rotreg_cost")));
@@ -164,27 +171,15 @@ double  RegOptProb::f_tps_cost(const VectorXd& x) {
 		err += M_mn.row(i).dot((est.rowwise() - target_md.row(i)).rowwise().squaredNorm());
 	}
 
-	// correspondence term sum_ij M_ij:
-	double M_sum = correspondence_coeff*M_mn.sum();
-
-	// bending term: \lambda Tr(A.T*K*A)
-	double bending = 0.0;
-	MatrixXd KA = K_nn*A_n3;
-	for (unsigned i=0; i < A_n3.cols(); i+=1) {
-		bending += A_n3.col(i).dot(KA.col(i));
-	}
-	bending *= bend_coeff;
-
-	double objective = err - M_sum - bending;
-	return objective;
+	return 1;//err;
 }
-
 
 /** Computes the polar-decomposition cost. Uses rapprentice's fastrapp. */
 double  RegOptProb::f_rotreg_cost(const VectorXd& x) {
 	Map<Matrix3d> B_33((double*)x.data(),3,3);
 	return RotReg(B_33, rot_coeff, scale_coeff);
 }
+
 
 /** Double-stochasticity of correspondence matrix M. */
 void  RegOptProb::doubly_stochastic_constraints() {
@@ -235,4 +230,52 @@ void  RegOptProb::vanishing_moment_constraints() {
 			addLinearConstraint(aff_cnt, EQ);
 		}
 	}
+}
+
+/** Adds the -lambda Tr(A.T*K*A) cost.
+    -K is conditionally positive definite.*/
+BendingCost::BendingCost(const MatrixXd & K_nn_, double bend_coeff_, const VarArray &a_vars_) :
+						K_nn(K_nn_), bend_coeff(bend_coeff_), a_vars(a_vars_) {
+	name_ = "bending_cost";
+	K_nn *= -bend_coeff;
+	// for each col of A : [Ax Ay Az]
+	for (int dim=0; dim < a_vars.cols(); dim+=1) {
+		for(int i=0; i < K_nn.rows(); i+=1) {
+			QuadExpr qexpr;
+			qexpr.vars1 = vector<Var>(K_nn.rows(), a_vars(i, dim));
+			qexpr.vars2 = a_vars.col(dim);
+			for(int j=0; j < K_nn.cols(); j+=1)
+				qexpr.coeffs.push_back(K_nn(i,j));
+			exprInc(expr, qexpr);
+		}
+	}
+}
+
+
+double BendingCost::value(const DblVec& x) {
+	return	expr.value(x);
+}
+
+ConvexObjectivePtr BendingCost::convex(const DblVec& x, Model* model) {
+	cout << "---------- bending cost convex called"<<endl;
+	ConvexObjectivePtr cvx_obj(new ConvexObjective(model));
+	cvx_obj->addQuadExpr(expr);
+	return cvx_obj;
+}
+
+/** Correspondence term - a* sum_ij M_ij */
+CorrespondenceCost::CorrespondenceCost (double corr_coeff_, const VarArray &m_vars_) :
+		corr_coeff(corr_coeff_), m_vars(m_vars_) {
+	sum_expr.vars = m_vars.m_data;
+	sum_expr.coeffs = vector<double>(m_vars.size(), -corr_coeff);
+}
+
+double CorrespondenceCost::value(const sco::DblVec& x) {
+	return sum_expr.value(x);
+}
+
+ConvexObjectivePtr CorrespondenceCost::convex(const sco::DblVec& x, sco::Model* model) {
+	ConvexObjectivePtr cvx_obj(new ConvexObjective(model));
+	cvx_obj->addAffExpr(sum_expr);
+	return cvx_obj;
 }

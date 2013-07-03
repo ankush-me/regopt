@@ -95,3 +95,29 @@ private:
 	/** Constraints : (1 X).T * A = 0*/
 	void vanishing_moment_constraints();
 };
+
+
+/** Adds the -lambda Tr(A.T*K*A) cost.
+    -K is conditionally positive definite.*/
+class BendingCost: public sco::Cost {
+public:
+	BendingCost(const Eigen::MatrixXd & K_nn_, double bend_coeff_, const VarArray &a_vars_);
+	double value(const sco::DblVec& x);
+	sco::ConvexObjectivePtr convex(const sco::DblVec& x, sco::Model* model);
+private:
+	Eigen::MatrixXd K_nn;
+	double  bend_coeff;
+	VarArray a_vars;
+	sco::QuadExpr expr;
+};
+
+/** Correspondence term sum_ij M_ij */
+class CorrespondenceCost : public sco::Cost {
+	double corr_coeff;
+	VarArray m_vars;
+	sco::AffExpr  sum_expr;
+public:
+	CorrespondenceCost (double corr_coeff_, const VarArray &m_vars_);
+	double value(const sco::DblVec& x);
+	sco::ConvexObjectivePtr convex(const sco::DblVec& x, sco::Model* model);
+};
