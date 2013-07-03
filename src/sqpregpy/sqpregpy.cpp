@@ -50,7 +50,8 @@ py::object fit_tps_sqp(py::object src_cloud, py::object target_cloud,
 	vector<double> solution = solver->x();
 	MatrixXd B;	extract_vals(solution, B, prob->b_vars);
 	MatrixXd c; extract_vals(solution, c, prob->c_vars);
-	MatrixXd A; extract_vals(solution, A, prob->a_vars);
+	MatrixXd W; extract_vals(solution, W, prob->w_vars);
+	MatrixXd A = prob->N_nq*W;
 	MatrixXd M; extract_vals(solution, M, prob->m_vars);
 
 	cout << "============================================\n"

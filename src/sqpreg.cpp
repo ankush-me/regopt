@@ -53,8 +53,8 @@ pair<BasicTrustRegionSQPPtr, RegOptProb::Ptr> setup_optimization(RegOptConfig::P
 	set_vals(x, c, prob->c_vars);
 
 	// 4. weight matrix
-	MatrixXd A = MatrixXd::Ones(prob->a_vars.rows(), prob->a_vars.cols());
-	set_vals(x, A, prob->a_vars);
+	MatrixXd W = MatrixXd::Zero(prob->w_vars.rows(), prob->w_vars.cols());
+	set_vals(x, W, prob->w_vars);
 
 	solver->initialize(x);
 	return make_pair(solver, prob);

@@ -7,6 +7,7 @@
 #include <sco/modeling_utils.hpp>
 #include <sco/expr_ops.hpp>
 #include "rotreg.hpp"
+#include <stdlib.h>
 
 using namespace Eigen;
 using namespace std;
@@ -32,13 +33,12 @@ MatrixXd getMat(const vector<double>& x, const VarArray& vars) {
 
 
 RegOptProb::RegOptProb(RegOptConfig::Ptr config) :
-										src_nd(config->src_pts), target_md(config->target_pts),
-										rot_coeff(config->rot_coeff), scale_coeff(config->scale_coeff),
-										bend_coeff(config->bend_coeff),
-										correspondence_coeff(config->correspondence_coeff),
-										n_src(src_nd.rows()), m_target(target_md.rows()),
-										rotreg(config->rotreg),
-										K_nn(n_src, n_src) {
+												src_nd(config->src_pts), target_md(config->target_pts),
+												rot_coeff(config->rot_coeff), scale_coeff(config->scale_coeff),
+												bend_coeff(config->bend_coeff),
+												correspondence_coeff(config->correspondence_coeff),
+												n_src(src_nd.rows()), m_target(target_md.rows()),
+												rotreg(config->rotreg) {
 	init();
 }
 
@@ -50,8 +50,7 @@ RegOptProb::RegOptProb(const MatrixX3d &src_pts, const MatrixX3d &target_pts,
   rot_coeff(rot_coeff_), scale_coeff(scale_coeff_), bend_coeff(bend_coeff_),
   correspondence_coeff(correspondence_coeff_),
   n_src(src_nd.rows()), m_target(target_md.rows()),
-  rotreg(rotreg_),
-  K_nn(n_src, n_src) {
+  rotreg(rotreg_) {
 
 	init();
 }
@@ -60,9 +59,19 @@ RegOptProb::RegOptProb(const MatrixX3d &src_pts, const MatrixX3d &target_pts,
 void RegOptProb::init() {
 
 	call_count = 0;
+
 	// compute the tps-kernel matrix
+	MatrixXd K_nn(n_src, n_src);
 	for (int i=0; i < n_src; i++)
 		K_nn.row(i) = (src_nd.rowwise() - src_nd.row(i)).rowwise().norm();
+
+	// Calculate the null-space of [X 1].T and project A on that.
+	// by doing this, the vanishing_moment_constraints are not needed.
+	MatrixXd X1(src_nd.rows(), src_nd.cols()+1);
+	X1 << src_nd, MatrixXd::Ones(src_nd.rows(),1);
+	JacobiSVD<MatrixXd> svd(X1, ComputeFullU);
+	N_nq = svd.matrixU().block(0,4,src_nd.rows(), src_nd.rows()-4);
+	KN_nq = K_nn*N_nq;
 
 	init_vars();
 	init_costs();
@@ -79,7 +88,7 @@ void RegOptProb::init() {
  *    1. M ((M+1)x (N+1)) : correspondence matrix
  *    2. c (3x1)          : translation
  *    3. B (3x3)          : affine part
- *    4. A (NX3)          : tps kernel weights
+ *    4. W ((N-4)x3)      : tps kernel weights of null of [X 1]
  */
 void RegOptProb::init_vars() {
 	// correspondence matrix variables
@@ -114,16 +123,17 @@ void RegOptProb::init_vars() {
 	b_vars = VarArray(3, 3, getVars().data()+last_size);
 
 
-	// tps kernel weights
+	// tps kernel weights [weights of Null-space of [X 1]]
+	// such that A = N_nq*w_q3
 	last_size = getVars().size();
-	vector<string> a_names(3*n_src);
-	for (unsigned i=0; i < n_src; i+=1) {
+	vector<string> w_names(KN_nq.cols()*3);
+	for (unsigned i=0; i < KN_nq.cols(); i+=1) {
 		for(int j=0; j < 3; j+=1) {
-			a_names[i*3 + j] = (boost::format("a_%i_%i")%i%j).str();
+			w_names[i*3 + j] = (boost::format("w_%i_%i")%i%j).str();
 		}
 	}
-	createVariables(a_names);
-	a_vars = VarArray(n_src, 3, getVars().data()+last_size);
+	createVariables(w_names);
+	w_vars = VarArray(KN_nq.cols(), 3, getVars().data()+last_size);
 }
 
 void  RegOptProb::init_costs() {
@@ -132,7 +142,7 @@ void  RegOptProb::init_costs() {
 	addCost(CostPtr(new CostFromFunc(f_ptr, getVars(), "f_tps_cost")));
 
 	// add the bending cost:
-	addCost(CostPtr(new BendingCost(K_nn, bend_coeff, a_vars)));
+	addCost(CostPtr(new BendingCost(KN_nq, N_nq, bend_coeff, w_vars)));
 
 	// add the cost on correspondence matrix:
 	addCost(CostPtr(new CorrespondenceCost(correspondence_coeff, m_vars)));
@@ -146,11 +156,11 @@ void  RegOptProb::init_costs() {
 /** Adds the following constraints:
  *  ===============================
  *    1. Doubly-stochastic constraint on M (allowing for outliers).
- *    2. (1 X).T * A = 0.
+ *    2. (1 X).T * A = 0. : not needed as A is projected onto the null space of [1 X].
  *  M_ij \in [0,1] : this is already set in variable construction. */
 void  RegOptProb::init_constraints() {
 	doubly_stochastic_constraints();
-	vanishing_moment_constraints();
+	//vanishing_moment_constraints();
 }
 
 /** Computes the tps-cost, given the current long solution vector x.
@@ -162,16 +172,16 @@ double  RegOptProb::f_tps_cost(const VectorXd& x) {
 	MatrixXd M_mn = getMat(x, m_vars.block(0,0, n_src, m_target));
 	Vector3d c_3  = Vector3d(getMat(x, c_vars));
 	MatrixXd B_33 = getMat(x, b_vars);
-	MatrixXd A_n3 = getMat(x, a_vars);
+	MatrixXd W_q3 = getMat(x, w_vars);
 
 	// error term: sum_ij M_ij * || T_i - estimate_j ||^2
 	double err = 0.0;
-	MatrixXd est = (K_nn*A_n3 + src_nd*B_33).rowwise() + c_3.transpose();
+	MatrixXd est = (KN_nq*W_q3 + src_nd*B_33).rowwise() + c_3.transpose();
 	for (unsigned i=0; i < target_md.rows(); i+=1) {
 		err += M_mn.row(i).dot((est.rowwise() - target_md.row(i)).rowwise().squaredNorm());
 	}
 
-	return 1;//err;
+	return err;
 }
 
 /** Computes the polar-decomposition cost. Uses rapprentice's fastrapp. */
@@ -207,45 +217,47 @@ void  RegOptProb::doubly_stochastic_constraints() {
 /** Constraints : (1 X).T * A = 0*/
 void  RegOptProb::vanishing_moment_constraints() {
 
-	// 1.T*A = 0
-	for (unsigned i=0; i < a_vars.cols(); i+=1) {
-		AffExpr aff_cnt;
-		aff_cnt.vars     = a_vars.col(i);
-		aff_cnt.constant = 0.0;
-		aff_cnt.coeffs   = vector<double>(a_vars.rows(), 1.0);
-		addLinearConstraint(aff_cnt, EQ);
-	}
-
-	// X.T*A = 0;  src_nd == X
-	for(unsigned xi = 0; xi < src_nd.cols(); xi+=1) {
-		for(unsigned ai = 0; ai < a_vars.cols(); ai +=1) {
-			AffExpr aff_cnt;
-			aff_cnt.vars     = a_vars.col(ai);
-			aff_cnt.constant = 0.0;
-
-			vector<double> coeffs(src_nd.rows());
-			VectorXd::Map(&coeffs[0], coeffs.size()) = src_nd.col(xi);
-			aff_cnt.coeffs   = coeffs;
-
-			addLinearConstraint(aff_cnt, EQ);
-		}
-	}
+//	// 1.T*A = 0
+//	for (unsigned i=0; i < a_vars.cols(); i+=1) {
+//		AffExpr aff_cnt;
+//		aff_cnt.vars     = a_vars.col(i);
+//		aff_cnt.constant = 0.0;
+//		aff_cnt.coeffs   = vector<double>(a_vars.rows(), 1.0);
+//		addLinearConstraint(aff_cnt, EQ);
+//	}
+//
+//	// X.T*A = 0;  src_nd == X
+//	for(unsigned xi = 0; xi < src_nd.cols(); xi+=1) {
+//		for(unsigned ai = 0; ai < a_vars.cols(); ai +=1) {
+//			AffExpr aff_cnt;
+//			aff_cnt.vars     = a_vars.col(ai);
+//			aff_cnt.constant = 0.0;
+//
+//			vector<double> coeffs(src_nd.rows());
+//			VectorXd::Map(&coeffs[0], coeffs.size()) = src_nd.col(xi);
+//			aff_cnt.coeffs   = coeffs;
+//
+//			addLinearConstraint(aff_cnt, EQ);
+//		}
+//	}
 }
 
 /** Adds the -lambda Tr(A.T*K*A) cost.
     -K is conditionally positive definite.*/
-BendingCost::BendingCost(const MatrixXd & K_nn_, double bend_coeff_, const VarArray &a_vars_) :
-						K_nn(K_nn_), bend_coeff(bend_coeff_), a_vars(a_vars_) {
+BendingCost::BendingCost(const MatrixXd & KN_nq_, const MatrixXd &N_nq_, double bend_coeff_, const VarArray &w_vars_) :
+		NtKN_qq(N_nq_.transpose()*KN_nq_), bend_coeff(bend_coeff_), w_vars(w_vars_) {
 	name_ = "bending_cost";
-	K_nn *= -bend_coeff;
-	// for each col of A : [Ax Ay Az]
-	for (int dim=0; dim < a_vars.cols(); dim+=1) {
-		for(int i=0; i < K_nn.rows(); i+=1) {
+	NtKN_qq *= -bend_coeff;
+
+	assert (("Bending cost matrix shape mismatch.", NtKN_qq.rows()==w_vars.rows() && w_vars.cols()==3));
+	// for each col of W : [Wx Wy Wz]
+	for (int dim=0; dim < w_vars.cols(); dim+=1) {
+		for(int i=0; i < NtKN_qq.rows(); i+=1) {
 			QuadExpr qexpr;
-			qexpr.vars1 = vector<Var>(K_nn.rows(), a_vars(i, dim));
-			qexpr.vars2 = a_vars.col(dim);
-			for(int j=0; j < K_nn.cols(); j+=1)
-				qexpr.coeffs.push_back(K_nn(i,j));
+			qexpr.vars1 = vector<Var>(w_vars.rows(), w_vars(i, dim));
+			qexpr.vars2 = w_vars.col(dim);
+			for(int j=0; j < NtKN_qq.cols(); j+=1)
+				qexpr.coeffs.push_back(NtKN_qq(i,j));
 			exprInc(expr, qexpr);
 		}
 	}
@@ -265,7 +277,7 @@ ConvexObjectivePtr BendingCost::convex(const DblVec& x, Model* model) {
 
 /** Correspondence term - a* sum_ij M_ij */
 CorrespondenceCost::CorrespondenceCost (double corr_coeff_, const VarArray &m_vars_) :
-		corr_coeff(corr_coeff_), m_vars(m_vars_) {
+				corr_coeff(corr_coeff_), m_vars(m_vars_) {
 	sum_expr.vars = m_vars.m_data;
 	sum_expr.coeffs = vector<double>(m_vars.size(), -corr_coeff);
 }

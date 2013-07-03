@@ -46,14 +46,15 @@ public:
 	double correspondence_coeff;
 	unsigned int n_src, m_target;
 	bool rotreg;
-	Eigen::MatrixXd  K_nn;
+	Eigen::MatrixXd  KN_nq;
+	Eigen::MatrixXd  N_nq; // null of [X 1]
 	unsigned call_count;
 
 	// hold the optimization variables for easy access
 	VarArray m_vars;
 	VarArray c_vars;
 	VarArray b_vars;
-	VarArray a_vars;
+	VarArray w_vars;
 
 private:
 
@@ -101,13 +102,13 @@ private:
     -K is conditionally positive definite.*/
 class BendingCost: public sco::Cost {
 public:
-	BendingCost(const Eigen::MatrixXd & K_nn_, double bend_coeff_, const VarArray &a_vars_);
+	BendingCost(const Eigen::MatrixXd & K_nn_, const Eigen::MatrixXd &N_nq_, double bend_coeff_, const VarArray &a_vars_);
 	double value(const sco::DblVec& x);
 	sco::ConvexObjectivePtr convex(const sco::DblVec& x, sco::Model* model);
 private:
-	Eigen::MatrixXd K_nn;
+	Eigen::MatrixXd NtKN_qq;
 	double  bend_coeff;
-	VarArray a_vars;
+	VarArray w_vars;
 	sco::QuadExpr expr;
 };
 
