@@ -33,12 +33,12 @@ MatrixXd getMat(const vector<double>& x, const VarArray& vars) {
 
 
 RegOptProb::RegOptProb(RegOptConfig::Ptr config) :
-												src_nd(config->src_pts), target_md(config->target_pts),
-												rot_coeff(config->rot_coeff), scale_coeff(config->scale_coeff),
-												bend_coeff(config->bend_coeff),
-												correspondence_coeff(config->correspondence_coeff),
-												n_src(src_nd.rows()), m_target(target_md.rows()),
-												rotreg(config->rotreg) {
+																src_nd(config->src_pts), target_md(config->target_pts),
+																rot_coeff(config->rot_coeff), scale_coeff(config->scale_coeff),
+																bend_coeff(config->bend_coeff),
+																correspondence_coeff(config->correspondence_coeff),
+																n_src(src_nd.rows()), m_target(target_md.rows()),
+																rotreg(config->rotreg) {
 	init();
 }
 
@@ -149,7 +149,7 @@ void  RegOptProb::init_costs() {
 
 	if (rotreg) {
 		ScalarOfVectorPtr f_rotreg_ptr = ScalarOfVector::construct(boost::bind( &RegOptProb::f_rotreg_cost, this, _1 ));
-		addCost(CostPtr(new CostFromFunc(f_rotreg_ptr, b_vars.m_data, "f_rotreg_cost")));
+		addCost(CostPtr(new CostFromFunc(f_rotreg_ptr, b_vars.m_data, "f_rotreg_cost", true)));
 	}
 }
 
@@ -160,7 +160,6 @@ void  RegOptProb::init_costs() {
  *  M_ij \in [0,1] : this is already set in variable construction. */
 void  RegOptProb::init_constraints() {
 	doubly_stochastic_constraints();
-	//vanishing_moment_constraints();
 }
 
 /** Computes the tps-cost, given the current long solution vector x.
@@ -169,7 +168,7 @@ double  RegOptProb::f_tps_cost(const VectorXd& x) {
 	call_count += 1;
 
 	// retrieve current values in the correct matrix shapes.
-	MatrixXd M_mn = getMat(x, m_vars.block(0,0, n_src, m_target));
+	MatrixXd M_mn = getMat(x, m_vars.block(0,0, m_target, n_src));
 	Vector3d c_3  = Vector3d(getMat(x, c_vars));
 	MatrixXd B_33 = getMat(x, b_vars);
 	MatrixXd W_q3 = getMat(x, w_vars);
@@ -214,38 +213,116 @@ void  RegOptProb::doubly_stochastic_constraints() {
 	}
 }
 
-/** Constraints : (1 X).T * A = 0*/
-void  RegOptProb::vanishing_moment_constraints() {
 
-//	// 1.T*A = 0
-//	for (unsigned i=0; i < a_vars.cols(); i+=1) {
-//		AffExpr aff_cnt;
-//		aff_cnt.vars     = a_vars.col(i);
-//		aff_cnt.constant = 0.0;
-//		aff_cnt.coeffs   = vector<double>(a_vars.rows(), 1.0);
-//		addLinearConstraint(aff_cnt, EQ);
-//	}
-//
-//	// X.T*A = 0;  src_nd == X
-//	for(unsigned xi = 0; xi < src_nd.cols(); xi+=1) {
-//		for(unsigned ai = 0; ai < a_vars.cols(); ai +=1) {
-//			AffExpr aff_cnt;
-//			aff_cnt.vars     = a_vars.col(ai);
-//			aff_cnt.constant = 0.0;
-//
-//			vector<double> coeffs(src_nd.rows());
-//			VectorXd::Map(&coeffs[0], coeffs.size()) = src_nd.col(xi);
-//			aff_cnt.coeffs   = coeffs;
-//
-//			addLinearConstraint(aff_cnt, EQ);
-//		}
-//	}
-}
+/** Adds the weighted residual cost. */
+class ResidualCost: public sco::Cost {
+public:
+	ResidualCost(const RegOptProb* & prob) :
+		KN_nq(prob->KN_nq),
+		X_n3(prob->src_nd), Y_m3(prob->target_md),
+		W(prob->w_vars), B(prob->b_vars),
+		M(prob->m_vars), c(prob->c_vars),
+		n_src(prob->n_src), m_target(prob->m_target) {}
+
+	/** Return the value of sum_ij m_ij ||y_j - f(x)_i||^2. */
+	double comp_val(const MatrixXd &M_mn, const Vector3d &c_3, const MatrixXd &B_33, const MatrixXd W_q3) {
+		double err = 0.0;
+		MatrixXd est = (KN_nq*W_q3 + X_n3*B_33).rowwise() + c_3.transpose();
+		for (unsigned i=0; i < m_target; i+=1)
+			err += M_mn.row(i).dot((est.rowwise() - Y_m3.row(i)).rowwise().squaredNorm());
+		return err;
+	}
+
+	/** Return the value of sum_ij m_ij ||y_j - f(x)_i||^2. */
+	double value(const sco::DblVec& x) {
+		// retrieve current values in the correct matrix shapes.
+		MatrixXd M_mn = getMat(x, M.block(0,0,  m_target, n_src));
+		Vector3d c_3  = Vector3d(getMat(x, c));
+		MatrixXd B_33 = getMat(x, B);
+		MatrixXd W_q3 = getMat(x, W);
+
+		return comp_val(M_mn, c_3, B_33, W_q3);
+	}
+
+	/** Returns an approximation to the weighted residual error.
+	 *  Using Taylor's expansion. */
+	sco::ConvexObjectivePtr convex(const sco::DblVec& x, sco::Model* model) {
+		// retrieve current values in the correct matrix shapes.
+		MatrixXd M_mn = getMat(x, M.block(0,0,  m_target, n_src));
+		Vector3d c_3  = Vector3d(getMat(x, c));
+		MatrixXd B_33 = getMat(x, B);
+		MatrixXd W_q3 = getMat(x, W);
+
+		// we index w.r.t the source points; Hence, need to
+		// work with the transpose of M_mn.
+		VectorXd colsum = M_mn.colwise().sum().array() + EPS;
+		MatrixXd Mnorm_nm(M_mn.cols(), M_mn.rows());
+		for(unsigned i=0; i < M_mn.cols(); i+=1)
+			Mnorm_nm.row(i) = M_mn.col(i)/colsum[i];
+
+		// sum_j c_ij \in R^n
+		VectorXd sum_cij = M_mn.colwise().sum();
+
+		// sum_j c_norm_ij y_j \in R^3xn
+		MatrixXd wy_3n  = (Mnorm_nm*Y_m3).transpose();
+
+		// sum_j c_norm_ij y_j^2 \in R^3xn
+		MatrixXd wy2_3n = (Mnorm_nm*Y_m3.array().square()).transpose();
+
+		// final quadratic approximation
+		QuadExpr out_expr;
+
+		for(int d=0; d<3; d+=1) {// for x,y,z:
+			// get the variables for the i-th dimension.
+			// make KN*w term
+			AffExpr w_aff, b_aff, c_aff;
+			w_aff.vars = W.col(d);
+			b_aff.vars = B.col(d);
+			c_aff.vars = c(d);
+			c_aff.coeffs = vector<double>(1,1.0);
+
+			for(unsigned i=0; i < n_src; i+=1) {// for each source point
+
+				// get coeffs for KN*w
+				if (i==0)
+					w_aff.coeffs.resize(w_aff.vars.size());
+				VectorXd::Map(&w_aff.coeffs[0], w_aff.coeffs.size()) = KN_nq.row(i);
+
+				// get coeffs for XB:
+				if (i==0)
+					b_aff.coeffs.resize(b_aff.vars.size());
+				VectorXd::Map(&b_aff.coeffs[0], b_aff.coeffs.size()) = X_n3.row(i);
+
+				AffExpr err;
+				exprInc(err, c_aff);
+				exprInc(err, b_aff);
+				exprInc(err, w_aff);
+				exprInc(err, (double) -wy_3n(d,i));
+				QuadExpr err2 = exprSquare(err);
+				exprInc(err2, (double) (wy2_3n(d,i) - (wy_3n(d,i)*wy_3n(d,i)) ) );
+				exprScale(err2, (double) sum_cij[i]);
+
+				exprInc(out_expr, err2);
+			}
+		}
+
+		// now add perturbations for c_ij:
+
+
+	}
+
+private:
+
+	Eigen::MatrixXd KN_nq;
+	Eigen::MatrixXd X_n3,Y_m3;
+	VarArray W,B,M,c;
+	unsigned int n_src, m_target;
+};
 
 /** Adds the -lambda Tr(A.T*K*A) cost.
     -K is conditionally positive definite.*/
 BendingCost::BendingCost(const MatrixXd & KN_nq_, const MatrixXd &N_nq_, double bend_coeff_, const VarArray &w_vars_) :
-		NtKN_qq(N_nq_.transpose()*KN_nq_), bend_coeff(bend_coeff_), w_vars(w_vars_) {
+						NtKN_qq(N_nq_.transpose()*KN_nq_), bend_coeff(bend_coeff_), w_vars(w_vars_) {
 	name_ = "bending_cost";
 	NtKN_qq *= -bend_coeff;
 
@@ -269,7 +346,6 @@ double BendingCost::value(const DblVec& x) {
 }
 
 ConvexObjectivePtr BendingCost::convex(const DblVec& x, Model* model) {
-	cout << "---------- bending cost convex called"<<endl;
 	ConvexObjectivePtr cvx_obj(new ConvexObjective(model));
 	cvx_obj->addQuadExpr(expr);
 	return cvx_obj;
@@ -277,7 +353,7 @@ ConvexObjectivePtr BendingCost::convex(const DblVec& x, Model* model) {
 
 /** Correspondence term - a* sum_ij M_ij */
 CorrespondenceCost::CorrespondenceCost (double corr_coeff_, const VarArray &m_vars_) :
-				corr_coeff(corr_coeff_), m_vars(m_vars_) {
+								corr_coeff(corr_coeff_), m_vars(m_vars_) {
 	sum_expr.vars = m_vars.m_data;
 	sum_expr.coeffs = vector<double>(m_vars.size(), -corr_coeff);
 }
