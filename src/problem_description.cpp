@@ -267,7 +267,8 @@ public:
 		MatrixXd wy_3n  = (Mnorm_nm*Y_m3).transpose();
 
 		// sum_j c_norm_ij y_j^2 \in R^3xn
-		MatrixXd wy2_3n = (Mnorm_nm*Y_m3.array().square()).transpose();
+		MatrixXd y2_n3 = Y_m3.array().square();
+		MatrixXd wy2_3n = (Mnorm_nm*y2_n3).transpose();
 
 		// final quadratic approximation
 		QuadExpr out_expr;
@@ -278,7 +279,7 @@ public:
 			AffExpr w_aff, b_aff, c_aff;
 			w_aff.vars = W.col(d);
 			b_aff.vars = B.col(d);
-			c_aff.vars = c(d);
+			c_aff.vars = c.row(d);
 			c_aff.coeffs = vector<double>(1,1.0);
 
 			for(unsigned i=0; i < n_src; i+=1) {// for each source point
@@ -307,8 +308,24 @@ public:
 		}
 
 		// now add perturbations for c_ij:
+		// --> calculate the estimate and the pairwise squared-error.
+		MatrixXd est_n3 = (KN_nq*W_q3 + X_n3*B_33).rowwise() + c_3.transpose();
+		MatrixXd err_mn(m_target, n_src);
+		for (unsigned i=0; i < m_target; i+=1)
+			err_mn.row(i) = (est_n3.rowwise() - Y_m3.row(i)).rowwise().squaredNorm();
 
+		// set up the affine expression in C_ij : (c_ij' - c_ij_0)*err_ij^2
+		AffExpr c_expr;
+		c_expr.vars   = M.block(0,0,  m_target, n_src).m_data;
+		c_expr.coeffs.resize(m_target*n_src);
+		MatrixXd::Map(&c_expr.coeffs[0], m_target, n_src) = M_mn;
+		exprSub(c_expr, (err_mn.array()*M_mn.array()).sum());
 
+		exprInc(out_expr, c_expr);
+
+		ConvexObjectivePtr cvx_obj(new ConvexObjective(model));
+		cvx_obj->addQuadExpr(out_expr);
+		return cvx_obj;
 	}
 
 private:
