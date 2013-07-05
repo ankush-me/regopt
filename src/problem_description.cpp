@@ -33,12 +33,12 @@ MatrixXd getMat(const vector<double>& x, const VarArray& vars) {
 
 
 RegOptProb::RegOptProb(RegOptConfig::Ptr config) :
-																src_nd(config->src_pts), target_md(config->target_pts),
-																rot_coeff(config->rot_coeff), scale_coeff(config->scale_coeff),
-																bend_coeff(config->bend_coeff),
-																correspondence_coeff(config->correspondence_coeff),
-																n_src(src_nd.rows()), m_target(target_md.rows()),
-																rotreg(config->rotreg) {
+		src_nd(config->src_pts), target_md(config->target_pts),
+		rot_coeff(config->rot_coeff), scale_coeff(config->scale_coeff),
+		bend_coeff(config->bend_coeff),
+		correspondence_coeff(config->correspondence_coeff),
+		n_src(src_nd.rows()), m_target(target_md.rows()),
+		rotreg(config->rotreg) {
 	init();
 }
 
