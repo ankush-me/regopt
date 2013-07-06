@@ -19,7 +19,7 @@ int main(int c, char**v) {
 	config->correspondence_coeff = 1;
 	config->rotreg      = true;
 
-	pair<BasicTrustRegionSQPPtr, RegOptProb::Ptr> setup =  setup_optimization(config);
+	pair<BasicTrustRegionSQPPtr, RegOptProb::Ptr> setup =  setup_reg_fit_optimization(config);
 	RegOptProb::Ptr prob = setup.second;
 
 	return 0;

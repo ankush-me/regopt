@@ -3,6 +3,25 @@
 using namespace Eigen;
 using namespace std;
 
+
+/** x is the big solution vector of the whole problem.
+ *  vars are variables that index into the vector x
+ *  this function extracts (from x) the values of the variables in vars. */
+MatrixXd getMat(const VectorXd& x, const VarArray& vars) {
+	MatrixXd out(vars.rows(), vars.cols());
+	for (unsigned i=0; i < vars.rows(); i++) {
+		for (unsigned j=0; j < vars.cols(); j++) {
+			out(i,j) = x[vars(i,j).var_rep->index];
+		}
+	}
+	return out;
+}
+
+MatrixXd getMat(const vector<double>& x, const VarArray& vars) {
+	return getMat(VectorXd::Map(&x[0], x.size()), vars);
+}
+
+
 /** Put the values in the proper place in the big solution vector X. */
 void set_vals(vector<double> &x, const MatrixXd & data, const VarArray &index_mat) {
 	assert(("Indexing array and data array should have same shape. ",

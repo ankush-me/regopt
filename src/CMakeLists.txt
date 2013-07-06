@@ -6,6 +6,10 @@ include_directories(
 add_subdirectory(utils)
 add_subdirectory(tests)
 
-add_library(sqp_reg sqpreg.cpp problem_description.cpp rotreg.cpp)
+add_library(sqp_reg sqpreg.cpp
+                    tps_reg_fit_problem.cpp
+                    tps_fit_problem.cpp
+                    rotreg.cpp
+                    tps_costs.cpp)
 
 add_subdirectory(sqpregpy)

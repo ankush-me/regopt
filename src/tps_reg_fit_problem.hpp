@@ -9,6 +9,8 @@
 #include <utils/basic_array.hpp>
 #include <utils/opt_utils.hpp>
 
+#include "tps_costs.hpp"
+
 /** Holds the input for a registration problem. **/
 struct RegOptConfig {
 	typedef boost::shared_ptr<RegOptConfig> Ptr;
@@ -18,12 +20,6 @@ struct RegOptConfig {
 	double scale_coeff, bend_coeff, correspondence_coeff;
 	bool rotreg;
 };
-
-/** x is the big solution vector of the whole problem.
- *  vars are variables that index into the vector x
- *  this function extracts (from x) the values of the variables in vars. */
-Eigen::MatrixXd getMat(const Eigen::VectorXd& x, const VarArray& vars);
-Eigen::MatrixXd getMat(const std::vector<double>& x, const VarArray& vars);
 
 /** Class to hold data for the registration problem. **/
 class RegOptProb : public sco::OptProb {
@@ -37,8 +33,6 @@ public:
 			const Eigen::Vector3d &rot_coeff_, double scale_coeff_, double bend_coeff_,
 			double correspondence_coeff_, bool rotreg_=true);
 	~RegOptProb() {}
-
-
 
 	MatrixX3d src_nd, target_md;
 	Eigen::Vector3d rot_coeff;
@@ -60,7 +54,6 @@ private:
 
 	/** Does self-initialization. */
 	void init();
-
 
 	/** Initialize the optimization variables.
 	 *
@@ -95,30 +88,4 @@ private:
 
 	/** Constraints : (1 X).T * A = 0*/
 	void vanishing_moment_constraints();
-};
-
-
-/** Adds the -lambda Tr(A.T*K*A) cost.
-    -K is conditionally positive definite.*/
-class BendingCost: public sco::Cost {
-public:
-	BendingCost(const Eigen::MatrixXd & K_nn_, const Eigen::MatrixXd &N_nq_, double bend_coeff_, const VarArray &a_vars_);
-	double value(const sco::DblVec& x);
-	sco::ConvexObjectivePtr convex(const sco::DblVec& x, sco::Model* model);
-private:
-	Eigen::MatrixXd NtKN_qq;
-	double  bend_coeff;
-	VarArray w_vars;
-	sco::QuadExpr expr;
-};
-
-/** Correspondence term sum_ij M_ij */
-class CorrespondenceCost : public sco::Cost {
-	double corr_coeff;
-	VarArray m_vars;
-	sco::AffExpr  sum_expr;
-public:
-	CorrespondenceCost (double corr_coeff_, const VarArray &m_vars_);
-	double value(const sco::DblVec& x);
-	sco::ConvexObjectivePtr convex(const sco::DblVec& x, sco::Model* model);
 };
