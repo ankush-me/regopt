@@ -133,7 +133,7 @@ void  RegOptProb::init_costs() {
 
 	if (rotreg) {
 		ScalarOfVectorPtr f_rotreg_ptr = ScalarOfVector::construct(boost::bind( &RegOptProb::f_rotreg_cost, this, _1 ));
-		addCost(CostPtr(new CostFromFunc(f_rotreg_ptr, b_vars.m_data, "f_rotreg_cost", true)));
+		addCost(CostPtr(new CostFromFunc(f_rotreg_ptr, b_vars.m_data, "f_rotreg_cost", false)));
 	}
 }
 
