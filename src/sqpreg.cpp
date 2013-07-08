@@ -20,8 +20,8 @@ pair<BasicTrustRegionSQPPtr, RegOptProb::Ptr> setup_reg_fit_optimization(RegOptC
 	BasicTrustRegionSQPPtr solver(new BasicTrustRegionSQP(prob));
 	solver->trust_box_size_ = 100;
 	solver->max_iter_ = 100;
-	solver->min_trust_box_size_ = 1e-6;
-	solver->min_approx_improve_ = 1e-10;
+	solver->min_trust_box_size_ = 1e-4;
+	solver->min_approx_improve_ = 1e-7;
 
 	/** Initialize the solution vector:
 	 *

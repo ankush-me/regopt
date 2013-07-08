@@ -70,7 +70,6 @@ py::object fit_reg_sqp(py::object src_cloud, py::object target_cloud,
 		cout << "call count: "<< prob->call_count<<endl;
 		cout << "num vars: "<< prob->getVars().size()<<endl;
 	}
-	//cout << "correspondences : " << M <<endl;
 
 	py::list out;
 	out.append(toNumpy(A));

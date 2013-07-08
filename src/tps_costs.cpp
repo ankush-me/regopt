@@ -139,18 +139,21 @@ ConvexObjectivePtr WeightedResidualCost::convex(const DblVec& x, Model* model) {
 		c_aff.vars = c.row(d);
 		c_aff.coeffs = vector<double>(1,1.0);
 
+		AffExpr w_aff, b_aff;
+		w_aff.vars = W.col(d);
+		b_aff.vars = B.col(d);
+
 		for(unsigned i=0; i < n_src; i+=1) {// for each source point
 
-			AffExpr w_aff, b_aff;
-			w_aff.vars = W.col(d);
-			b_aff.vars = B.col(d);
 
 			// get coeffs for KN*w
-			w_aff.coeffs.resize(w_aff.vars.size());
+			if (i==0)
+				w_aff.coeffs.resize(w_aff.vars.size());
 			VectorXd::Map(&w_aff.coeffs[0], w_aff.coeffs.size()) = KN_nq.row(i);
 
 			// get coeffs for XB:
-			b_aff.coeffs.resize(b_aff.vars.size());
+			if (i==0)
+				b_aff.coeffs.resize(b_aff.vars.size());
 			VectorXd::Map(&b_aff.coeffs[0], b_aff.coeffs.size()) = X_n3.row(i);
 
 			AffExpr err;
