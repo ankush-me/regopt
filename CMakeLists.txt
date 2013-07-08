@@ -14,6 +14,15 @@ set(BUILD_SHARED_LIBS true)
 # definitions
 add_definitions("-DPROJECT_DATA_DIR=${CMAKE_SOURCE_DIR}/data")
 
+# http://cmake.3232098.n2.nabble.com/Default-value-for-CMAKE-BUILD-TYPE-td7550756.html
+# borrowed from trajopt
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  message(STATUS "Setting build type to 'Release' as none was specified.")
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
+  # Set the possible values of build type for cmake-gui
+  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release"
+    "MinSizeRel" "RelWithDebInfo")
+endif()
 
 # find boost
 find_package(Boost COMPONENTS system python thread program_options REQUIRED)
@@ -27,7 +36,6 @@ include_directories(${OpenRAVE_INCLUDE_DIRS})
 find_package(Eigen REQUIRED)
 add_definitions("-DEIGEN_DEFAULT_TO_ROW_MAJOR")
 include_directories(${EIGEN_INCLUDE_DIRS})
-
 
 
 # John's sco stuff

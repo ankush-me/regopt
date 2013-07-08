@@ -7,6 +7,7 @@
 #include <sco/modeling.hpp>
 #include <utils/basic_array.hpp>
 #include <utils/opt_utils.hpp>
+#include <boost/multi_array.hpp>
 
 // forward declarations
 class RegOptProb;
@@ -54,6 +55,31 @@ private:
 	/** Return the value of sum_ij m_ij ||y_j - f(x)_i||^2. */
 	double comp_val(const Eigen::MatrixXd &M_mn, const Eigen::Vector3d &c_3,
 			const Eigen::MatrixXd &B_33, const Eigen::MatrixXd W_q3);
+};
+
+/** Adds the weighted residual cost. */
+class CWeightedResidualCost: public sco::Cost {
+public:
+
+	CWeightedResidualCost(const RegOptProb* prob);
+
+		/** Return the value of sum_ij m_ij ||y_j - f(x)_i||^2. */
+	double value(const sco::DblVec& x);
+	/** Returns an approximation to the weighted residual error.
+	 *  Using Taylor's expansion. */
+	sco::ConvexObjectivePtr convex(const sco::DblVec& x, sco::Model* model);
+
+private:
+	sco::QuadExpr lastApprox;
+	Eigen::MatrixXd KN_nq;
+	Eigen::MatrixXd X_n3,Y_m3;
+
+	/** Cached expressions, so that we don't need to build them again and again.*/
+	std::vector<std::vector<sco::AffExpr> > f;
+	std::vector<std::vector<sco::QuadExpr> > f2;
+
+	VarArray W,B,M,c;
+	unsigned int n_src, m_target;
 };
 
 /** Adds the -lambda Tr(A.T*K*A) cost [this is convex].

@@ -2,6 +2,7 @@
 #include "tps_fit_problem.hpp"
 #include "tps_reg_fit_problem.hpp"
 
+#include <boost/multi_array.hpp>
 
 #include <sco/expr_ops.hpp>
 
@@ -13,12 +14,12 @@ using namespace sco;
 
 /** Adds the weighted residual cost. */
 ResidualCost::ResidualCost(const TPSOptProb* prob) :
-		KN_nq(prob->KN_nq),
-		X_n3(prob->src_nd), Y_n3(prob->target_nd),
-		W(prob->w_vars),
-		B(prob->b_vars),
-		c(prob->c_vars),
-		n_pts(prob->n_pts) {
+						KN_nq(prob->KN_nq),
+						X_n3(prob->src_nd), Y_n3(prob->target_nd),
+						W(prob->w_vars),
+						B(prob->b_vars),
+						c(prob->c_vars),
+						n_pts(prob->n_pts) {
 	name_ = "residual_cost";
 
 	for(int d=0; d < 3; d+=1) {// for x,y,z
@@ -70,13 +71,13 @@ ConvexObjectivePtr ResidualCost::convex(const DblVec& x, Model* model) {
 
 /** Adds the weighted residual cost. */
 WeightedResidualCost::WeightedResidualCost(const RegOptProb* prob) :
-										KN_nq(prob->KN_nq),
-										X_n3(prob->src_nd), Y_m3(prob->target_md),
-										W(prob->w_vars),
-										B(prob->b_vars),
-										M(prob->m_vars.block(0,0,  prob->m_target, prob->n_src)),
-										c(prob->c_vars),
-										n_src(prob->n_src), m_target(prob->m_target) {
+														KN_nq(prob->KN_nq),
+														X_n3(prob->src_nd), Y_m3(prob->target_md),
+														W(prob->w_vars),
+														B(prob->b_vars),
+														M(prob->m_vars.block(0,0,  prob->m_target, prob->n_src)),
+														c(prob->c_vars),
+														n_src(prob->n_src), m_target(prob->m_target) {
 	name_ = "w_residual_cost";
 }
 
@@ -144,9 +145,8 @@ ConvexObjectivePtr WeightedResidualCost::convex(const DblVec& x, Model* model) {
 		b_aff.vars = B.col(d);
 
 		for(unsigned i=0; i < n_src; i+=1) {// for each source point
-
-
 			// get coeffs for KN*w
+
 			if (i==0)
 				w_aff.coeffs.resize(w_aff.vars.size());
 			VectorXd::Map(&w_aff.coeffs[0], w_aff.coeffs.size()) = KN_nq.row(i);
@@ -177,7 +177,6 @@ ConvexObjectivePtr WeightedResidualCost::convex(const DblVec& x, Model* model) {
 		err_mn.row(i) = (est_n3.rowwise() - Y_m3.row(i)).rowwise().squaredNorm();
 
 
-
 	// set up the affine expression in C_ij : (c_ij' - c_ij_0)*err_ij^2
 	AffExpr c_expr;
 	c_expr.vars   = M.m_data;
@@ -192,10 +191,136 @@ ConvexObjectivePtr WeightedResidualCost::convex(const DblVec& x, Model* model) {
 }
 
 
+/** Adds the weighted residual cost. */
+CWeightedResidualCost::CWeightedResidualCost(const RegOptProb* prob) :
+		KN_nq(prob->KN_nq),
+		X_n3(prob->src_nd), Y_m3(prob->target_md),
+		W(prob->w_vars),
+		B(prob->b_vars),
+		M(prob->m_vars.block(0,0,  prob->m_target, prob->n_src)),
+		c(prob->c_vars),
+		n_src(prob->n_src), m_target(prob->m_target) {
+
+	name_ = "cw_residual_cost";
+
+	f.resize(3);
+	f2.resize(3);
+	for(int d=0; d < 3; d+=1) {
+		AffExpr c_aff;
+		c_aff.vars = c.row(d);
+		c_aff.coeffs = vector<double>(1,1.0);
+
+		AffExpr w_aff, b_aff;
+		w_aff.vars = W.col(d);
+		b_aff.vars = B.col(d);
+
+		f[d].resize(n_src);
+		f2[d].resize(n_src);
+
+		for(unsigned i=0; i < n_src; i+=1) {
+			// get coeffs for KN*w
+			if (i==0)
+				w_aff.coeffs.resize(w_aff.vars.size());
+			VectorXd::Map(&w_aff.coeffs[0], w_aff.coeffs.size()) = KN_nq.row(i);
+
+			// get coeffs for XB:
+			if (i==0)
+				b_aff.coeffs.resize(b_aff.vars.size());
+			VectorXd::Map(&b_aff.coeffs[0], b_aff.coeffs.size()) = X_n3.row(i);
+
+			f[d][i]  = exprAdd(exprAdd(b_aff, w_aff), c_aff);
+			f2[d][i] = exprSquare(f[d][i]);
+		}
+	}
+}
+
+/** Return the value of sum_ij m_ij ||y_j - f(x)_i||^2. */
+double CWeightedResidualCost::value(const DblVec& x) {
+	// retrieve current values in the correct matrix shapes.
+	MatrixXd M_mn = getMat(x, M);
+	Vector3d c_3  = Vector3d(getMat(x, c));
+	MatrixXd B_33 = getMat(x, B);
+	MatrixXd W_q3 = getMat(x, W);
+
+	double err = 0.0;
+	MatrixXd est_n3 = (KN_nq*W_q3 + X_n3*B_33).rowwise() + c_3.transpose();
+	for (unsigned i=0; i < M_mn.rows(); i+=1) {
+		VectorXd err_i = (est_n3.rowwise() - Y_m3.row(i)).rowwise().squaredNorm();
+		err += M_mn.row(i).dot(err_i);
+	}
+	return err;
+}
+
+
+/** Returns an approximation to the weighted residual error.
+ *  Using Taylor's expansion. */
+ConvexObjectivePtr CWeightedResidualCost::convex(const DblVec& x, Model* model) {
+	// retrieve current values in the correct matrix shapes.
+	MatrixXd M_mn = getMat(x, M);
+	Vector3d c_3  = Vector3d(getMat(x, c));
+	MatrixXd B_33 = getMat(x, B);
+	MatrixXd W_q3 = getMat(x, W);
+
+	// we index w.r.t the source points; Hence, need to
+	// work with the transpose of M_mn.
+	// sum_j c_ij \in R^n
+	VectorXd sum_cij = M_mn.colwise().sum();
+	VectorXd colsum  = sum_cij.array() + EPS;
+	MatrixXd Mnorm_nm(M_mn.cols(), M_mn.rows());
+	for(unsigned i=0; i < M_mn.cols(); i+=1)
+		Mnorm_nm.row(i) = M_mn.col(i)/colsum[i];
+
+	// sum_j c_norm_ij y_j \in R^3xn
+	MatrixXd wy_3n  = (Mnorm_nm*Y_m3).transpose();
+
+	// sum_j c_norm_ij y_j^2 \in R^3xn
+	MatrixXd y2_n3 = Y_m3.array().square();
+	MatrixXd wy2_3n = (Mnorm_nm*y2_n3).transpose();
+
+	// final quadratic approximation
+	QuadExpr out_expr;
+
+	for(int d=0; d<3; d+=1) {// for x,y,z:
+		for(unsigned i=0; i < n_src; i+=1) {// for each source point
+			QuadExpr qexpr = f2[d][i];
+			AffExpr  f_di  = f[d][i];
+			exprScale(f_di, (double) -2.0*wy_3n(d,i));
+			exprInc(f_di, (double) wy2_3n(d,i));
+			exprInc(qexpr, f_di);
+			exprScale(qexpr, (double) sum_cij[i]);
+			exprInc(out_expr, qexpr);
+		}
+	}
+
+
+	// now add terms for changes in c_ij:
+	// --> calculate the estimate and the pairwise squared-error.
+	MatrixXd est_n3 = (KN_nq*W_q3 + X_n3*B_33).rowwise() + c_3.transpose();
+	MatrixXd err_mn(m_target, n_src);
+	for (unsigned i=0; i < m_target; i+=1)
+		err_mn.row(i) = (est_n3.rowwise() - Y_m3.row(i)).rowwise().squaredNorm();
+
+	// set up the affine expression in C_ij : (c_ij' - c_ij_0)*err_ij^2
+	AffExpr c_expr;
+	c_expr.vars   = M.m_data;
+	c_expr.coeffs.resize(m_target*n_src);
+	MatrixXd::Map(&c_expr.coeffs[0], m_target, n_src) = err_mn;
+	exprDec(c_expr, (err_mn.array()*M_mn.array()).sum());
+
+	exprInc(out_expr, c_expr);
+	ConvexObjectivePtr cvx_obj(new ConvexObjective(model));
+	cvx_obj->addQuadExpr(out_expr);
+
+	return cvx_obj;
+}
+
+
+
+
 /** Adds the -lambda Tr(A.T*K*A) cost.
     -K is conditionally positive definite.*/
 BendingCost::BendingCost(const MatrixXd & KN_nq_, const MatrixXd &N_nq_, double bend_coeff_, const VarArray &w_vars_) :
-														NtKN_qq(N_nq_.transpose()*KN_nq_), bend_coeff(bend_coeff_), w_vars(w_vars_) {
+																		NtKN_qq(N_nq_.transpose()*KN_nq_), bend_coeff(bend_coeff_), w_vars(w_vars_) {
 	name_ = "bending_cost";
 	NtKN_qq *= -bend_coeff;
 

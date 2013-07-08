@@ -123,7 +123,7 @@ void RegOptProb::init_vars() {
 
 void  RegOptProb::init_costs() {
 	// add tps-cost
-	addCost(CostPtr(new WeightedResidualCost(this)));
+	addCost(CostPtr(new CWeightedResidualCost(this)));
 
 	// add the bending cost:
 	addCost(CostPtr(new BendingCost(KN_nq, N_nq, bend_coeff, w_vars)));
