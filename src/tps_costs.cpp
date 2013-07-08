@@ -51,7 +51,6 @@ ResidualCost::ResidualCost(const TPSOptProb* prob) :
 			exprInc(cost_expr, err_sq);
 		}
 	}
-
 }
 
 /** Return the value of sum_ij m_ij ||y_j - f(x)_i||^2. */
@@ -85,11 +84,14 @@ WeightedResidualCost::WeightedResidualCost(const RegOptProb* prob) :
 /** Return the value of sum_ij m_ij ||y_j - f(x)_i||^2. */
 double WeightedResidualCost::comp_val(const MatrixXd &M_mn, const Vector3d &c_3, const MatrixXd &B_33, const MatrixXd W_q3) {
 	double err = 0.0;
-	MatrixXd est = (KN_nq*W_q3 + X_n3*B_33).rowwise() + c_3.transpose();
-	for (unsigned i=0; i < m_target; i+=1)
-		err += M_mn.row(i).dot((est.rowwise() - Y_m3.row(i)).rowwise().squaredNorm());
+	MatrixXd est_n3 = (KN_nq*W_q3 + X_n3*B_33).rowwise() + c_3.transpose();
+	for (unsigned i=0; i < M_mn.rows(); i+=1) {
+		VectorXd err_i = (est_n3.rowwise() - Y_m3.row(i)).rowwise().squaredNorm();
+		err += M_mn.row(i).dot(err_i);
+	}
 	return err;
 }
+
 
 /** Return the value of sum_ij m_ij ||y_j - f(x)_i||^2. */
 double WeightedResidualCost::value(const DblVec& x) {
@@ -101,6 +103,7 @@ double WeightedResidualCost::value(const DblVec& x) {
 
 	return comp_val(M_mn, c_3, B_33, W_q3);
 }
+
 
 /** Returns an approximation to the weighted residual error.
  *  Using Taylor's expansion. */
@@ -170,12 +173,14 @@ ConvexObjectivePtr WeightedResidualCost::convex(const DblVec& x, Model* model) {
 	for (unsigned i=0; i < m_target; i+=1)
 		err_mn.row(i) = (est_n3.rowwise() - Y_m3.row(i)).rowwise().squaredNorm();
 
+
+
 	// set up the affine expression in C_ij : (c_ij' - c_ij_0)*err_ij^2
 	AffExpr c_expr;
 	c_expr.vars   = M.m_data;
 	c_expr.coeffs.resize(m_target*n_src);
-	MatrixXd::Map(&c_expr.coeffs[0], m_target, n_src) = M_mn;
-	exprSub(c_expr, (err_mn.array()*M_mn.array()).sum());
+	MatrixXd::Map(&c_expr.coeffs[0], m_target, n_src) = err_mn;
+	exprDec(c_expr, (err_mn.array()*M_mn.array()).sum());
 
 	exprInc(out_expr, c_expr);
 	ConvexObjectivePtr cvx_obj(new ConvexObjective(model));

@@ -72,7 +72,7 @@ pair<BasicTrustRegionSQPPtr, TPSOptProb::Ptr> setup_fit_optimization(TPSOptConfi
 	BasicTrustRegionSQPPtr solver(new BasicTrustRegionSQP(prob));
 	solver->trust_box_size_ = 10;
 	solver->max_iter_ = 20;
-	solver->min_trust_box_size_ = 1e-5;
+	solver->min_trust_box_size_ = 1e-4;
 	solver->min_approx_improve_ = 1e-10;
 
 	/** Initialize the solution vector:
