@@ -50,6 +50,23 @@ py::object toNdarray3(const T* data, size_t dim0, size_t dim1, size_t dim2) {
 	return out;
 }
 
+static py::object toNP(const Eigen::MatrixXd & mat) {
+	py::object out = np_mod.attr("empty")(py::make_tuple(mat.rows(), mat.cols()), type_traits<double>::npname);
+	double* pout = getPointer<double>(out);
+	memcpy(pout, mat.data(), mat.rows()*mat.cols()*sizeof(double));
+	return out;
+}
+
+static Eigen::MatrixXd fromNP(py::object arr) {
+  arr = np_mod.attr("array")(arr, "float64");
+  int rows = py::extract<int>(arr.attr("shape")[0]);
+  int cols = py::extract<int>(arr.attr("shape")[1]);
+  Eigen::MatrixXd mat(rows, cols);
+  double* p = getPointer<double>(arr);
+  memcpy(&mat(0,0), p,  rows*cols*sizeof(double));
+  return mat;
+}
+
 /** Converts a one-dimensional numpy vector to eigen VectorXd. */
 Eigen::VectorXd fromNumpyVector(py::object vec) {
 	assert(("Input numpy matrix is not one dimensional.", py::extract<int>(vec.attr("ndim"))==1));
