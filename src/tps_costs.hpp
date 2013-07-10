@@ -27,6 +27,7 @@ public:
 
 private:
 	sco::QuadExpr cost_expr;
+	Eigen::VectorXd w_n;
 	Eigen::MatrixXd KN_nq;
 	Eigen::MatrixXd X_n3,Y_n3;
 	VarArray W,B,c;

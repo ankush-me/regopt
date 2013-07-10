@@ -9,6 +9,8 @@
 #include "tps_reg_fit_problem.hpp"
 #include "tps_fit_problem.hpp"
 
+#include <stdlib.h>
+
 namespace py = boost::python;
 using namespace Eigen;
 using namespace std;
@@ -43,6 +45,7 @@ py::object fit_reg_sqp(py::object src_cloud, py::object target_cloud,
 		cout << "rot reg: "<<  config->rotreg <<endl;
 		cout << "===================================================\n";
 	}
+
 
 	pair<BasicTrustRegionSQPPtr, RegOptProb::Ptr> opt_prob =  setup_reg_fit_optimization(config);
 	BasicTrustRegionSQPPtr solver = opt_prob.first;
@@ -85,12 +88,14 @@ py::object fit_reg_sqp(py::object src_cloud, py::object target_cloud,
  *
  *  Parameters: source point-cloud, target point-cloud, optimization costs.*/
 py::object fit_sqp(py::object src_cloud, py::object target_cloud,
+		py::object weights,
 		py::object rot_coeff, double scale_coeff, double bend_coeff,
 		bool rotreg=true, bool verbose=false) {
 
 	TPSOptConfig::Ptr config (new TPSOptConfig);
 	config->src_pts     = fromNumpy(src_cloud);
 	config->target_pts  = fromNumpy(target_cloud);
+	config->weights     = fromNumpyVector(weights);
 	config->rot_coeff   = fromNumpyVector(rot_coeff);
 	config->scale_coeff = scale_coeff;
 	config->bend_coeff  = bend_coeff;
@@ -125,6 +130,10 @@ BOOST_PYTHON_MODULE(sqpregpy) {
 			py::arg("scale_coeff"), py::arg("bend_coeff"), py::arg("correspondence_coeff"),
 			py::arg("rotreg"), py::arg("verbose")));
 
-	py::def("fit_sqp", &fit_sqp, (py::arg("src"), py::arg("target"), py::arg("rot_coeff"),
-				py::arg("scale_coeff"), py::arg("bend_coeff"), py::arg("rotreg"), py::arg("verbose")));
+	py::def("fit_sqp", &fit_sqp, (py::arg("src"), py::arg("target"),
+			py::arg("weights"),
+			py::arg("rot_coeff"),
+			py::arg("scale_coeff"),
+			py::arg("bend_coeff"),
+			py::arg("rotreg"), py::arg("verbose")));
 }

@@ -14,6 +14,7 @@ using namespace sco;
 
 /** Adds the weighted residual cost. */
 ResidualCost::ResidualCost(const TPSOptProb* prob) :
+						w_n(prob->w_n),
 						KN_nq(prob->KN_nq),
 						X_n3(prob->src_nd), Y_n3(prob->target_nd),
 						W(prob->w_vars),
@@ -23,7 +24,6 @@ ResidualCost::ResidualCost(const TPSOptProb* prob) :
 	name_ = "residual_cost";
 
 	for(int d=0; d < 3; d+=1) {// for x,y,z
-
 		// add +c
 		AffExpr c_aff;
 		c_aff.vars = c.row(d);
@@ -48,6 +48,9 @@ ResidualCost::ResidualCost(const TPSOptProb* prob) :
 			exprInc(err_expr, b_aff);
 			exprDec(err_expr, (double) Y_n3(i,d));
 			QuadExpr err_sq = exprSquare(err_expr);
+
+			// weighted least squares:
+			exprScale(err_sq, (double) w_n[i]);
 
 			exprInc(cost_expr, err_sq);
 		}

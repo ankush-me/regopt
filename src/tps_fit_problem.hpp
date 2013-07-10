@@ -17,6 +17,7 @@ struct TPSOptConfig {
 	typedef boost::shared_ptr<TPSOptConfig> Ptr;
 
 	MatrixX3d src_pts, target_pts;
+	Eigen::VectorXd  weights;
 	Eigen::Vector3d rot_coeff;
 	double scale_coeff, bend_coeff;
 	bool rotreg;
@@ -31,12 +32,14 @@ public:
 	TPSOptProb(TPSOptConfig::Ptr reg_config);
 
 	TPSOptProb(const MatrixX3d &src_pts, const MatrixX3d &target_pts,
+			const Eigen::VectorXd &weights,
 			const Eigen::Vector3d &rot_coeff_, double scale_coeff_, double bend_coeff_,
 			bool rotreg_=true);
 	~TPSOptProb() {}
 
 
 	MatrixX3d src_nd, target_nd;
+	Eigen::VectorXd w_n;
 	unsigned int n_pts;
 	Eigen::Vector3d rot_coeff;
 	double scale_coeff, bend_coeff;

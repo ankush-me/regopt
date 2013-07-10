@@ -17,6 +17,7 @@ using namespace std;
 TPSOptProb::TPSOptProb(TPSOptConfig::Ptr config) :
 		src_nd(config->src_pts),
 		target_nd(config->target_pts),
+		w_n(config->weights),
 		n_pts(config->src_pts.rows()),
 		rot_coeff(config->rot_coeff),
 		scale_coeff(config->scale_coeff),
@@ -27,8 +28,10 @@ TPSOptProb::TPSOptProb(TPSOptConfig::Ptr config) :
 }
 
 TPSOptProb::TPSOptProb(const MatrixX3d &src_pts, const MatrixX3d &target_pts,
+		const VectorXd &weights,
 		const Vector3d &rot_coeff_, double scale_coeff_, double bend_coeff_, bool rotreg_) :
 		src_nd(src_pts), target_nd(target_pts),
+		w_n(weights),
 		n_pts(src_pts.rows()),
 		rot_coeff(rot_coeff_), scale_coeff(scale_coeff_), bend_coeff(bend_coeff_),
 		rotreg(rotreg_) {
@@ -50,7 +53,7 @@ void TPSOptProb::init() {
 	// Calculate the null-space of [X 1].T and project A on that.
 	// by doing this, the vanishing_moment_constraints are not needed.
 	MatrixXd X1(src_nd.rows(), src_nd.cols()+1);
-	X1 << src_nd, MatrixXd::Ones(src_nd.rows(),1);
+	X1 << MatrixXd::Ones(src_nd.rows(),1), src_nd;
 	JacobiSVD<MatrixXd> svd(X1, ComputeFullU);
 	N_nq = svd.matrixU().block(0,4,src_nd.rows(), src_nd.rows()-4);
 	KN_nq = K_nn*N_nq;
@@ -112,16 +115,14 @@ void  TPSOptProb::init_costs() {
 	addCost(CostPtr(new BendingCost(KN_nq, N_nq, bend_coeff, w_vars)));
 
 	if (rotreg) {
+		cout << ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ADDING ROT REG <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n";
 		ScalarOfVectorPtr f_rotreg_ptr = ScalarOfVector::construct(boost::bind( &TPSOptProb::f_rotreg_cost, this, _1 ));
 		addCost(CostPtr(new CostFromFunc(f_rotreg_ptr, b_vars.m_data, "f_rotreg_cost", true)));
 	}
 }
 
 /** Adds the following constraints:
- *  ===============================
- *    1. Doubly-stochastic constraint on M (allowing for outliers).
- *    2. (1 X).T * A = 0. : not needed as A is projected onto the null space of [1 X].
- *  M_ij \in [0,1] : this is already set in variable construction. */
+ *  =============================== */
 void  TPSOptProb::init_constraints() {}
 
 

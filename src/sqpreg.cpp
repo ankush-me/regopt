@@ -18,10 +18,10 @@ pair<BasicTrustRegionSQPPtr, RegOptProb::Ptr> setup_reg_fit_optimization(RegOptC
 
 	RegOptProb::Ptr prob(new RegOptProb(reg_config));
 	BasicTrustRegionSQPPtr solver(new BasicTrustRegionSQP(prob));
-	solver->trust_box_size_ = 100;
-	solver->max_iter_ = 50;
+	solver->trust_box_size_ = 10;
+	solver->max_iter_ = 100;
 	solver->min_trust_box_size_ = 1e-4;
-	solver->min_approx_improve_ = 1e-6;
+	solver->min_approx_improve_ = 1e-4;
 
 	/** Initialize the solution vector:
 	 *
@@ -70,10 +70,10 @@ pair<BasicTrustRegionSQPPtr, TPSOptProb::Ptr> setup_fit_optimization(TPSOptConfi
 
 	TPSOptProb::Ptr prob(new TPSOptProb(reg_config));
 	BasicTrustRegionSQPPtr solver(new BasicTrustRegionSQP(prob));
-	solver->trust_box_size_ = 10;
-	solver->max_iter_ = 20;
-	solver->min_trust_box_size_ = 1e-4;
-	solver->min_approx_improve_ = 1e-10;
+	solver->trust_box_size_ = 10; //10
+	solver->max_iter_ = 20;//20
+	solver->min_trust_box_size_ = 1e-3;//1e-3
+	solver->min_approx_improve_ = 1e-4;//1e-4
 
 	/** Initialize the solution vector:
 	 *
